@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 
-const API_BASE = 'http://127.0.0.1:8000'
+const API_BASE = useState("/api")
 
 function normalizeAnswer(s) {
   return s?.toString().trim().toLowerCase()
