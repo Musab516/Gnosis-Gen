@@ -10,17 +10,21 @@ import re
 
 # Load environment variables
 load_dotenv()
+
 api_key = os.getenv("OPENROUTER_API_KEY")
-
 if not api_key:
-    raise ValueError("❌ OPENROUTER_API_KEY not found in .env file")
+    raise ValueError("❌ OPENROUTER_API_KEY not found in environment variables")
 
-# Initialize OpenRouter client
+# ✅ Initialize OpenAI client for OpenRouter with required headers
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=api_key,
+    default_headers={
+        "HTTP-Referer": "https://gnosis-gen.vercel.app",  # your frontend URL
+        "X-Title": "Gnosis Gen",  # your app name
+        "User-Agent": "GnosisGen/1.0",
+    },
 )
-
 # FastAPI setup
 app = FastAPI(title="AI Quiz & Study Assistant")
 
