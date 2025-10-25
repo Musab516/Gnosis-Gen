@@ -1,0 +1,197 @@
+import React, { useState, useEffect } from 'react'
+
+const API_BASE = 'http://127.0.0.1:8000' // <-- change if your backend URL is different
+
+function normalizeAnswer(s) {
+  return s?.toString().trim().toLowerCase()
+}
+
+export default function App() {
+  const [mode, setMode] = useState('quiz')
+  const [userRequest, setUserRequest] = useState('')
+  const [topic, setTopic] = useState('')
+  const [textInput, setTextInput] = useState('')
+  const [file, setFile] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState(null)
+
+  // quiz state
+  const [answers, setAnswers] = useState({})
+  const [shortAnswers, setShortAnswers] = useState({})
+  const [checked, setChecked] = useState({})
+  const [score, setScore] = useState(0)
+
+  useEffect(() => {
+    setAnswers({})
+    setShortAnswers({})
+    setChecked({})
+    setScore(0)
+  }, [result])
+
+  async function submit() {
+    setLoading(true)
+    setError(null)
+    setResult(null)
+
+    try {
+      const form = new FormData()
+      form.append('mode', mode)
+      form.append('user_request', userRequest)
+      form.append('topic', topic)
+      if (textInput) form.append('text_input', textInput)
+      if (file) form.append('file', file)
+
+      const res = await fetch(`${API_BASE}/generate`, {
+        method: 'POST',
+        body: form,
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.message || JSON.stringify(data))
+      setResult(data)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleSelect(questionIdx, optionIdx) {
+    const key = `mcq-${questionIdx}`
+    setAnswers(prev => ({ ...prev, [key]: optionIdx }))
+
+    const q = result.quiz.mcq[questionIdx]
+    const selectedLabel = q.options[optionIdx]
+    const correct = q.correct_answer
+    const isCorrect =
+      normalizeAnswer(selectedLabel) === normalizeAnswer(correct) ||
+      String.fromCharCode(65 + optionIdx).toLowerCase() === normalizeAnswer(correct)
+
+    setChecked(prev => ({ ...prev, [key]: isCorrect }))
+    recalcScore({ ...answers, [key]: optionIdx }, shortAnswers, { ...checked, [key]: isCorrect })
+  }
+
+  function handleShortAnswer(questionIdx, value) {
+    const key = `short-${questionIdx}`
+    setShortAnswers(prev => ({ ...prev, [key]: value }))
+  }
+
+  function submitShortAnswer(questionIdx) {
+    const key = `short-${questionIdx}`
+    const userVal = shortAnswers[key] || ''
+    const correct = result.quiz.short_answer[questionIdx].correct_answer
+    const isCorrect = normalizeAnswer(userVal) === normalizeAnswer(correct)
+    setChecked(prev => ({ ...prev, [key]: isCorrect }))
+    recalcScore(answers, shortAnswers, { ...checked, [key]: isCorrect })
+  }
+
+  function recalcScore(ans, shortAns, checkedState) {
+    let s = 0
+    if (result && result.quiz && result.quiz.mcq) {
+      result.quiz.mcq.forEach((q, i) => {
+        const key = `mcq-${i}`
+        if (checkedState[key]) s += 1
+      })
+    }
+    if (result && result.quiz && result.quiz.short_answer) {
+      result.quiz.short_answer.forEach((q, i) => {
+        const key = `short-${i}`
+        if (checkedState[key]) s += 1
+      })
+    }
+    setScore(s)
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-6">
+      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow p-6">
+        <h1 className="text-2xl font-semibold mb-4">AI Quiz & Study Assistant</h1>
+
+        <div className="mb-4 grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium">Mode</label>
+            <select value={mode} onChange={e => setMode(e.target.value)} className="mt-1 block w-full border rounded p-2">
+              <option value="quiz">Quiz</option>
+              <option value="notes">Notes</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Topic (optional)</label>
+            <input value={topic} onChange={e => setTopic(e.target.value)} className="mt-1 block w-full border rounded p-2" placeholder="e.g. Binary Search Trees" />
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium">Your request (natural language)</label>
+          <textarea value={userRequest} onChange={e => setUserRequest(e.target.value)} rows={3} className="mt-1 block w-full border rounded p-2" placeholder="e.g. Explain stacks and how to implement them without arrays; quiz me on stack operations" />
+        </div>
+
+        <div className="mb-4 grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium">Optional text input</label>
+            <textarea value={textInput} onChange={e => setTextInput(e.target.value)} rows={4} className="mt-1 block w-full border rounded p-2" placeholder="Paste lecture notes or extra info here" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Optional PDF upload</label>
+            <input type="file" accept="application/pdf" onChange={e => setFile(e.target.files[0])} className="mt-1" />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button disabled={loading} onClick={submit} className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50">{loading ? 'Generating...' : 'Generate'}</button>
+          <div className="text-sm text-gray-600">{error}</div>
+          {result && result.mode === 'quiz' && (
+            <div className="ml-auto font-medium">Score: {score} / {(result.quiz.mcq?.length || 0) + (result.quiz.short_answer?.length || 0)}</div>
+          )}
+        </div>
+
+        {result && result.mode === 'notes' && (
+          <div className="mt-6">
+            <h2 className="text-xl font-semibold">Generated Notes</h2>
+            <div className="mt-3 whitespace-pre-wrap p-4 bg-slate-50 rounded">{result.notes}</div>
+          </div>
+        )}
+
+        {result && result.mode === 'quiz' && (
+          <div className="mt-6">
+            <h2 className="text-xl font-semibold">Quiz</h2>
+            <div className="mt-3 space-y-6">
+              {result.quiz.mcq?.map((q, i) => (
+                <div key={i} className="p-4 border rounded">
+                  <div className="font-medium">{i + 1}. {q.question}</div>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {q.options.map((opt, idx) => (
+                      <button key={idx} onClick={() => handleSelect(i, idx)} className={`p-2 text-left border rounded ${checked[`mcq-${i}`] !== undefined ? (checked[`mcq-${i}`] ? 'bg-green-100 border-green-400' : 'bg-red-100 border-red-400') : 'hover:bg-slate-100'}`}>
+                        <div className="font-semibold">{String.fromCharCode(65 + idx)}.</div>
+                        <div className="ml-2">{opt}</div>
+                      </button>
+                    ))}
+                  </div>
+                  {checked[`mcq-${i}`] !== undefined && (
+                    <div className="mt-2 text-sm">{checked[`mcq-${i}`] ? 'Correct ✅' : `Incorrect — Correct: ${q.correct_answer}`}</div>
+                  )}
+                </div>
+              ))}
+
+              {result.quiz.short_answer?.map((q, i) => (
+                <div key={i} className="p-4 border rounded">
+                  <div className="font-medium">SA {i + 1}. {q.question}</div>
+                  <textarea value={shortAnswers[`short-${i}`] || ''} onChange={(e) => handleShortAnswer(i, e.target.value)} rows={3} className="mt-2 w-full border rounded p-2" />
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => submitShortAnswer(i)} className="px-3 py-1 bg-blue-600 text-white rounded">Check</button>
+                    {checked[`short-${i}`] !== undefined && (
+                      <div className={`px-2 py-1 rounded ${checked[`short-${i}`] ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{checked[`short-${i}`] ? 'Correct ✅' : `Incorrect — Answer: ${q.correct_answer}`}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  )
+}
