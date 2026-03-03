@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 
-const API_BASE = import.meta.env.VITE_API_BASE || "https://gnosis-gen-production.up.railway.app";
+const API_BASE = import.meta.env.VITE_API_BASE || "https://gnosis-gen.onrender.com";
 
 function normalizeAnswer(s) {
   return s?.toString().trim().toLowerCase()
